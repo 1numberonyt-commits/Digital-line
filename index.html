@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="hi"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Digital Line</title>
+<style>
+:root{--bg:#e6eeec;--card:#fff;--ink:#0f3d3e;--mut:#5b7573;--line:#c5d6d3;--acc:#f2a900;--ok:#1f8a4c;--bad:#c0392b}
+@media (prefers-color-scheme:dark){:root{--bg:#0c1a1a;--card:#142828;--ink:#e3f0ee;--mut:#8fb0ac;--line:#25403f;--ok:#46c47d;--bad:#ef6a5b}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.4 system-ui,sans-serif;padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom)}
+.app{max-width:480px;margin:0 auto;padding:12px 14px 90px}
+h1{font-size:22px;margin:6px 0}h2{font-size:18px;margin:14px 0 8px}.mut{color:var(--mut);font-size:14px}
+.tabs{display:flex;background:var(--card);border:2px solid var(--ink);border-radius:12px;overflow:hidden;margin:8px 0}
+.tabs button{flex:1;border:0;background:none;color:var(--ink);font:600 16px system-ui;padding:11px}.tabs .on{background:var(--ink);color:var(--bg)}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px;margin:8px 0}
+.row{display:flex;gap:8px;align-items:center;justify-content:space-between}
+.code{font:700 14px ui-monospace,monospace;border:2px solid currentColor;border-radius:6px;padding:1px 7px}
+.chip{border-radius:20px;padding:2px 10px;font-size:13px;font-weight:600;color:#fff}.open{background:var(--ok)}.pause{background:#b7791f}.close{background:var(--bad)}
+.b{border:2px solid var(--ink);background:var(--card);color:var(--ink);border-radius:10px;font:600 15px system-ui;padding:9px 12px}
+.p{background:var(--ink);color:var(--bg)}.d{border-color:var(--bad);color:var(--bad)}.big{width:100%;padding:14px;font-size:17px;margin-top:8px}.s{padding:5px 9px;font-size:14px}
+input,select{width:100%;font:16px system-ui;padding:11px;border:2px solid var(--line);border-radius:10px;background:var(--card);color:var(--ink);margin:4px 0}
+.ticket{background:var(--acc);color:#3a2a00;border-radius:14px;padding:16px;margin:10px 0}.tn{font-size:60px;font-weight:700;line-height:1}
+.q{border-left:6px solid var(--line)}.q.serving{border-left-color:var(--ok)}.q.hold{border-left-color:#b7791f}
+.tools{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.note{font-size:14px;background:var(--card);border:1px dashed var(--mut);border-radius:10px;padding:8px 10px;margin:6px 0}.err{border-color:var(--bad);color:var(--bad)}
+.sheet{position:fixed;inset:0;background:rgba(0,0,0,.5);display:flex;align-items:flex-end}.sheet>div{background:var(--card);width:100%;max-width:480px;margin:auto;border-radius:16px 16px 0 0;padding:16px}
+.toast{position:fixed;left:12px;right:12px;bottom:14px;max-width:456px;margin:auto;background:var(--ink);color:var(--bg);border-radius:12px;padding:12px;display:flex;justify-content:space-between;align-items:center}
+</style></head><body><div class="app" id="app">Load ho raha hai...</div>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script>
+firebase.initializeApp({apiKey:"AIzaSyCw34wM8gdJF1PTUDdVrYTzv3_0czmmivU",authDomain:"digital-line-65ba5.firebaseapp.com",projectId:"digital-line-65ba5",storageBucket:"digital-line-65ba5.firebasestorage.app",messagingSenderId:"478056050994",appId:"1:478056050994:web:2763069f3945d6dc32e72b"});
+const auth=firebase.auth(),db=firebase.firestore(),$=i=>document.getElementById(i);
+const S={tab:'c',shops:[],q:'',sel:null,svc:null,my:null,myT:null,toks:[],shop:null,cons:{},err:'',sheet:null,toast:null,loaded:0,url:new URLSearchParams(location.search).get('shop')};
+let U=null,subs={};
+const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const fmt=m=>m>=60?Math.floor(m/60)+' ghanta'+(m%60?' '+m%60+' min':''):m+' min';
+const lbl={open:'Khula',pause:'Break par',close:'Band'},ACT=['wait','serving','hold'],isA=t=>t&&ACT.includes(t.s);
+const ls=(k,v)=>{try{if(v===undefined)return JSON.parse(localStorage.getItem(k));localStorage.setItem(k,JSON.stringify(v))}catch(e){return null}};
+const tref=(c,id)=>db.doc('shops/'+c+'/tokens/'+id);
+function sub(k,q,cb){if(subs[k])subs[k]();subs[k]=q.onSnapshot(cb,e=>{S.err=e.message;render()})}
+function say(m,u){S.toast=m;S.undo=u||null;render();clearTimeout(say.h);say.h=setTimeout(()=>{S.toast=null;S.undo=null;render()},7000)}
+async function run(f){try{S.err='';await f()}catch(e){S.err=e.message||String(e)}render()}
+
+auth.onAuthStateChanged(u=>{if(!u){auth.signInAnonymously().catch(e=>{S.err='Login nahi hua: '+e.message;render()});return}U=u;if(!S.loaded){S.loaded=1;init()}else render()});
+function init(){loadShops();S.my=ls('my');if(S.my)startMy();render()}
+function loadShops(){return db.collection('shops').limit(100).get().then(s=>{S.shops=s.docs.map(d=>d.data());if(S.url&&!S.sel)S.sel=S.shops.find(x=>x.code===S.url)||null;render()}).catch(e=>{S.err=e.message;render()})}
+function startMy(){const m=S.my;sub('mt',tref(m.code,m.id),d=>{S.myT=d.data();render()});
+ sub('q',db.collection('shops/'+m.code+'/tokens').where('s','in',ACT),s=>{S.toks=s.docs.map(d=>d.data()).sort((a,b)=>a.o-b.o);render()});
+ sub('ms',db.doc('shops/'+m.code),d=>{S.myShop=d.data();render()})}
+
+/* ---------- customer ---------- */
+function cust(){
+ if(S.my&&S.myT)return token();
+ if(!S.sel){const q=S.q.toLowerCase().trim(),l=S.shops.filter(x=>!q||x.name.toLowerCase().includes(q)||x.code.toLowerCase().includes(q));
+  let h='<h1>Line me lagein</h1><input id="srch" placeholder="Dukaan ka naam ya code (jaise SK4829)" value="'+esc(S.q)+'" oninput="S.q=this.value;render()">';
+  if(q&&l.length>1)h+='<div class="note">Is naam ki kai dukaanein hain. Code aur area dekhkar sahi dukaan chunein.</div>';
+  h+=l.map(x=>'<div class="card" onclick="S.sel=S.shops.find(y=>y.code===\''+x.code+'\');S.svc=Object.keys(S.sel.services)[0];render()"><div class="row"><b style="font-size:18px">'+esc(x.name)+'</b><span class="code">'+esc(x.code)+'</span></div><div class="mut">'+esc(x.area)+', '+esc(x.city)+' - '+esc(x.pin)+'</div><span class="chip '+x.status+'">'+lbl[x.status]+'</span></div>').join('');
+  if(!l.length)h+='<div class="note">Koi dukaan nahi mili. Naam ya code dobara check karein.</div>';
+  return h}
+ const s=S.sel;if(!S.svc)S.svc=Object.keys(s.services)[0];
+ let h='<button class="b s" onclick="S.sel=null;S.url=null;render()">&larr; Wapas</button><h2>Kya ye sahi dukaan hai?</h2><div class="card"><div class="row"><b style="font-size:22px">'+esc(s.name)+'</b><span class="code">'+esc(s.code)+'</span></div><div class="mut">'+esc(s.area)+', '+esc(s.city)+' - '+esc(s.pin)+'</div><span class="chip '+s.status+'">'+lbl[s.status]+'</span></div>';
+ if(s.status!=='open')return h+'<div class="note">Dukaan abhi "'+lbl[s.status]+'" hai, line nahi lag sakti.</div>';
+ const sv=ls('me')||{};
+ h+='<input id="nm" placeholder="Aapka naam" value="'+esc(sv.n||'')+'"><input id="ph" type="tel" maxlength="10" placeholder="Phone number (10 digit)" value="'+esc(sv.p||'')+'"><select id="sv" onchange="S.svc=this.value">'+Object.entries(s.services).map(([k,v])=>'<option value="'+esc(k)+'"'+(k===S.svc?' selected':'')+'>'+esc(k)+' ('+v+' min)</option>').join('')+'</select>';
+ return h+'<button class="b p big" onclick="join()">Haan, yehi dukaan hai - Line me lagein</button><button class="b big" onclick="S.sel=null;S.url=null;render()">Galat hai, wapas jao</button>'}
+function join(){run(async()=>{const n=$('nm').value.trim(),p=$('ph').value.trim(),s=S.sel;
+ if(!n||!/^\d{10}$/.test(p))throw Error('Naam aur 10 digit ka phone number likhein');
+ const svc=$('sv').value,m=s.services[svc],sr=db.doc('shops/'+s.code),tr=sr.collection('tokens').doc();
+ await db.runTransaction(async tx=>{const d=await tx.get(sr);if(d.data().status!=='open')throw Error('Dukaan abhi khuli nahi hai');const t=(d.data().nextToken||0)+1;
+  tx.update(sr,{nextToken:t});tx.set(tr,{id:tr.id,t,uid:U.uid,svc,m,s:'wait',o:Date.now()});tx.set(sr.collection('contacts').doc(tr.id),{uid:U.uid,name:n,phone:p,t})});
+ ls('me',{n,p});S.my={code:s.code,id:tr.id};ls('my',S.my);startMy()})}
+function token(){
+ const t=S.myT,s=S.myShop||S.sel||{name:'',code:S.my.code,area:'',city:''};
+ const end={done:'Aapka kaam ho gaya. Dhanyawad!',removed:'Aapko line se hata diya gaya. Wajah: '+esc(t.reason||'-'),left:'Aapne line chhod di.'}[t.s];
+ let h='<h1>Aapka token</h1><div class="ticket"><div class="row"><b>'+esc(s.name)+'</b><span class="code">'+esc(s.code)+'</span></div><div style="font-size:14px">'+esc(s.area||'')+' '+esc(s.city||'')+'</div><div class="tn">#'+t.t+'</div><hr style="border:0;border-top:2px dashed #3a2a00;margin:12px 0">';
+ if(end)h+='<b>'+end+'</b>';
+ else if(t.s==='serving')h+='<b style="font-size:20px">Aapki baari hai! Abhi andar aaiye.</b>';
+ else if(t.s==='hold')h+='<b>Aapka token hold par hai. Dukandar jald bulayenge.</b>';
+ else{const a=S.toks.filter(x=>x.o<t.o&&x.s!=='hold');const w=a.reduce((z,x)=>z+x.m,0);
+  h+='<div class="row"><div><div style="font-size:30px;font-weight:700">'+a.length+'</div>log aapke aage</div><div style="text-align:right"><div style="font-size:30px;font-weight:700">'+fmt(w+t.m)+'</div>ya '+fmt(w)+' me baari</div></div>';
+  if(a.length<=2)h+='<div style="margin-top:8px;font-weight:700">Dukaan ke paas aa jaaiye, number nazdeek hai!</div>'}
+ h+='<div style="font-size:14px;margin-top:8px">Kaam: '+esc(t.svc)+(s.status&&s.status!=='open'?' - Dukaan '+lbl[s.status]:'')+'</div></div>';
+ if(isA(t))h+='<button class="b d big" onclick="S.sheet=\'leave\';render()">Line chhodein</button>';
+ else h+='<button class="b p big" onclick="newLine()">Nayi line me lagein</button>';
+ return h+'<div class="note">Is page ko khula rakhein. Number badalte hi yahan turant dikhega.</div>'}
+function newLine(){['mt','q','ms'].forEach(k=>{if(subs[k]){subs[k]();delete subs[k]}});S.my=null;S.myT=null;S.sel=null;S.url=null;ls('my',null);render()}
+function leave(){run(async()=>{await tref(S.my.code,S.my.id).update({s:'left'});S.sheet=null})}
+
+/* ---------- dukandar ---------- */
+function ownerInit(){if(!U||U.isAnonymous||S.ownerLoaded)return;S.ownerLoaded=1;
+ db.collection('shops').where('owner','==',U.uid).get().then(s=>{if(!s.empty){S.shop=s.docs[0].data();startOwner()}else S.noShop=1;render()}).catch(e=>{S.err=e.message;render()})}
+function startOwner(){const c=S.shop.code;sub('os',db.doc('shops/'+c),d=>{S.shop=d.data();render()});
+ sub('ot',db.collection('shops/'+c+'/tokens').where('s','in',ACT),s=>{S.otoks=s.docs.map(d=>d.data()).sort((a,b)=>a.o-b.o);render()});
+ sub('oc',db.collection('shops/'+c+'/contacts'),s=>{S.cons={};s.docs.forEach(d=>S.cons[d.id]=d.data());render()})}
+function glogin(){auth.signInWithPopup(new firebase.auth.GoogleAuthProvider()).then(()=>{S.ownerLoaded=0;ownerInit()}).catch(e=>{S.err=e.message;render()})}
+function shopT(){
+ if(!U||U.isAnonymous)return '<h1>Dukandar login</h1><div class="note">Apni dukaan chalane ke liye Google se login karein.</div><button class="b p big" onclick="glogin()">Google se login karein</button>';
+ if(S.noShop&&!S.shop)return '<h1>Apni dukaan banayein</h1><input id="sn" placeholder="Dukaan ka naam"><input id="sa" placeholder="Area / mohalla"><input id="sc" placeholder="Shehar"><input id="sp" placeholder="Pin code" maxlength="6"><input id="ss" value="Haircut 20, Shave 10, Facial 45"><div class="mut">Kaam aur har kaam ka time (minute), comma se alag karke</div><button class="b p big" onclick="mkShop()">Dukaan banayein</button>';
+ const s=S.shop;if(!s)return 'Load ho raha hai...';const T=S.otoks||[],al=location.origin+location.pathname+'?shop='+s.code;
+ let h='<h1>'+esc(s.name)+'</h1><div class="row"><span class="code">'+esc(s.code)+'</span><span class="chip '+s.status+'">'+lbl[s.status]+'</span></div><div class="note">Customer link / QR ke liye: <b>'+esc(al)+'</b></div>';
+ h+='<div class="tabs">'+['open','pause','close'].map(k=>'<button class="'+(s.status===k?'on':'')+'" onclick="setSt(\''+k+'\')">'+lbl[k]+'</button>').join('')+'</div>';
+ const w=T.filter(x=>x.s!=='hold').reduce((a,x)=>a+x.m,0);
+ h+='<div class="row"><b>'+T.length+' log line me</b><b>Kul wait: '+fmt(w)+'</b></div><h2>Live line</h2>'+(T.length?'':'<div class="note">Line khali hai.</div>');
+ h+=T.map(x=>{const c=S.cons[x.id]||{};return '<div class="card q '+x.s+'"><div class="row"><span><b style="font-size:20px">#'+x.t+'</b> <b>'+esc(c.name||'...')+'</b> <span class="mut">'+esc(x.svc)+'</span></span><b>'+fmt(x.m)+'</b></div><div class="mut">'+(x.s==='serving'?'Abhi chal raha hai':x.s==='hold'?'Hold par':'Wait: '+fmt(T.filter(y=>y.o<x.o&&y.s!=='hold').reduce((a,y)=>a+y.m,0)))+(c.phone?' - '+esc(c.phone):'')+'</div><div class="tools">'+
+  (x.s==='serving'?'<button class="b s p" onclick="upd(\''+x.id+'\',{s:\'done\'})">Khatam</button>':x.s==='hold'?'<button class="b s p" onclick="upd(\''+x.id+'\',{s:\'wait\'})">Wapas line me</button>':'<button class="b s p" onclick="callN(\''+x.id+'\')">Bulao</button>')+
+  [5,15,30,60].map(m=>'<button class="b s" onclick="addT(\''+x.id+'\','+m+','+x.m+')">+'+(m===60?'1 ghanta':m)+'</button>').join('')+'<button class="b s" onclick="addT(\''+x.id+'\',-5,'+x.m+')">-5</button>'+
+  (x.s==='wait'?'<button class="b s" onclick="upd(\''+x.id+'\',{s:\'hold\'})">Hold</button><button class="b s" onclick="upd(\''+x.id+'\',{s:\'wait\',o:Date.now()})">Skip</button>':'')+
+  '<button class="b s d" onclick="S.sheet=\''+x.id+'\';render()">Hatao</button></div></div>'}).join('');
+ h+='<h2>Walk-in customer</h2><div class="card"><input id="wn" placeholder="Naam (optional)"><select id="wsv">'+Object.keys(s.services).map(k=>'<option>'+esc(k)+'</option>').join('')+'</select><button class="b p big" onclick="walk()">Token dein</button></div>';
+ return h+'<button class="b big" onclick="S.ownerLoaded=0;auth.signOut().then(()=>{S.shop=null;S.noShop=0;location.reload()})">Logout</button>'}
+function mkShop(){run(async()=>{const n=$('sn').value.trim(),a=$('sa').value.trim(),c=$('sc').value.trim(),p=$('sp').value.trim(),sv={};
+ $('ss').value.split(',').forEach(x=>{const m=x.trim().match(/^(.+?)\s+(\d+)$/);if(m)sv[m[1]]=+m[2]});
+ if(!n||!a||!c||!p||!Object.keys(sv).length)throw Error('Saari jaankari bharein. Kaam aise likhein: Haircut 20, Shave 10');
+ let code;for(let i=0;i<8;i++){code=(n.replace(/[^A-Za-z]/g,'').slice(0,2).toUpperCase()||'SH')+Math.floor(1000+Math.random()*9000);if(!(await db.doc('shops/'+code).get()).exists)break}
+ const d={name:n,area:a,city:c,pin:p,code,owner:U.uid,status:'open',services:sv,nextToken:0,ver:false};await db.doc('shops/'+code).set(d);S.shop=d;S.noShop=0;startOwner();loadShops()})}
+const upd=(id,o)=>run(()=>tref(S.shop.code,id).update(o));
+const addT=(id,d,m)=>upd(id,{m:Math.max(5,m+d)});
+function callN(id){run(async()=>{const b=db.batch();(S.otoks||[]).forEach(x=>{if(x.s==='serving')b.update(tref(S.shop.code,x.id),{s:'wait'})});b.update(tref(S.shop.code,id),{s:'serving'});await b.commit()})}
+function setSt(k){if(k==='close'){S.sheet='close';return render()}run(()=>db.doc('shops/'+S.shop.code).update({status:k}))}
+function rm(id,why){S.sheet=null;run(async()=>{await tref(S.shop.code,id).update({s:'removed',reason:why});say('Customer hata diya',()=>upd(id,{s:'wait'}))})}
+function closeAll(clear){S.sheet=null;run(async()=>{const b=db.batch();b.update(db.doc('shops/'+S.shop.code),{status:'close'});if(clear)(S.otoks||[]).forEach(x=>b.update(tref(S.shop.code,x.id),{s:'removed',reason:'Dukaan band ho gayi'}));await b.commit()})}
+function walk(){run(async()=>{const s=S.shop,sr=db.doc('shops/'+s.code),tr=sr.collection('tokens').doc(),svc=$('wsv').value,n=$('wn').value.trim()||'Walk-in';
+ await db.runTransaction(async tx=>{const d=await tx.get(sr),t=(d.data().nextToken||0)+1;tx.update(sr,{nextToken:t});tx.set(tr,{id:tr.id,t,uid:U.uid,svc,m:s.services[svc],s:'wait',o:Date.now()});tx.set(sr.collection('contacts').doc(tr.id),{uid:U.uid,name:n,phone:'',t})});say('Token de diya')})}
+
+function sheetH(){const s=S.sheet;if(!s)return '';let h='<div class="sheet" onclick="if(event.target===this){S.sheet=null;render()}"><div>';
+ if(s==='leave')h+='<h2>Line chhodni hai?</h2><button class="b d big" onclick="leave()">Haan, line chhodein</button><button class="b big" onclick="S.sheet=null;render()">Nahi, line me rahein</button>';
+ else if(s==='close')h+='<h2>Dukaan band karein?</h2><button class="b p big" onclick="closeAll(false)">Band karein, line rehne dein</button><button class="b d big" onclick="closeAll(true)">Band karein, sabko hatayein</button><button class="b big" onclick="S.sheet=null;render()">Cancel</button>';
+ else h+='<h2>Pakka hatana hai?</h2>'+['Customer aaya nahi','Kaam ho gaya','Galat token'].map(w=>'<button class="b big" onclick="rm(\''+s+'\',\''+w+'\')">'+w+'</button>').join('')+'<button class="b big" onclick="S.sheet=null;render()">Cancel</button>';
+ return h+'</div></div>'}
+function render(){const f=document.activeElement&&document.activeElement.id,p=f==='srch'?document.activeElement.selectionStart:0;
+ if(S.tab==='s')ownerInit();
+ $('app').innerHTML='<div class="tabs"><button class="'+(S.tab==='c'?'on':'')+'" onclick="S.tab=\'c\';render()">Customer</button><button class="'+(S.tab==='s'?'on':'')+'" onclick="S.tab=\'s\';render()">Dukandar</button></div>'+(S.err?'<div class="note err">'+esc(S.err)+'</div>':'')+(U?(S.tab==='c'?cust():shopT()):'Login ho raha hai...')+sheetH()+(S.toast?'<div class="toast"><span>'+esc(S.toast)+'</span>'+(S.undo?'<button class="b s" onclick="const u=S.undo;S.undo=null;S.toast=null;u()">Wapas jodo</button>':'')+'</div>':'');
+ if(f==='srch'){const e=$('srch');if(e){e.focus();e.setSelectionRange(p,p)}}}
+render();
+</script></body></html>
