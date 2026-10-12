@@ -31,7 +31,7 @@ input,select{width:100%;font:16px system-ui;padding:11px;border:2px solid var(--
 <script>
 firebase.initializeApp({apiKey:"AIzaSyCw34wM8gdJF1PTUDdVrYTzv3_0czmmivU",authDomain:"digital-line-65ba5.firebaseapp.com",projectId:"digital-line-65ba5",storageBucket:"digital-line-65ba5.firebasestorage.app",messagingSenderId:"478056050994",appId:"1:478056050994:web:2763069f3945d6dc32e72b"});
 const auth=firebase.auth(),db=firebase.firestore(),$=i=>document.getElementById(i);
-const S={tab:'c',shops:[],q:'',sel:null,svc:null,my:null,myT:null,toks:[],shop:null,cons:{},err:'',sheet:null,toast:null,loaded:0,url:new URLSearchParams(location.search).get('shop')};
+const S={tab:'c',f:{},shops:[],q:'',sel:null,svc:null,my:null,myT:null,toks:[],shop:null,cons:{},err:'',sheet:null,toast:null,loaded:0,url:new URLSearchParams(location.search).get('shop')};
 let U=null,subs={};
 const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const fmt=m=>m>=60?Math.floor(m/60)+' ghanta'+(m%60?' '+m%60+' min':''):m+' min';
@@ -96,7 +96,7 @@ function startOwner(){const c=S.shop.code;sub('os',db.doc('shops/'+c),d=>{S.shop
 function glogin(){auth.signInWithPopup(new firebase.auth.GoogleAuthProvider()).then(()=>{S.ownerLoaded=0;ownerInit()}).catch(e=>{S.err=e.message;render()})}
 function shopT(){
  if(!U||U.isAnonymous)return '<h1>Dukandar login</h1><div class="note">Apni dukaan chalane ke liye Google se login karein.</div><button class="b p big" onclick="glogin()">Google se login karein</button>';
- if(S.noShop&&!S.shop)return '<h1>Apni dukaan banayein</h1><input id="sn" placeholder="Dukaan ka naam"><input id="sa" placeholder="Area / mohalla"><input id="sc" placeholder="Shehar"><input id="sp" placeholder="Pin code" maxlength="6"><input id="ss" value="Haircut 20, Shave 10, Facial 45"><div class="mut">Kaam aur har kaam ka time (minute), comma se alag karke</div><button class="b p big" onclick="mkShop()">Dukaan banayein</button>';
+ if(S.noShop&&!S.shop)return '<h1>Apni dukaan banayein</h1>'+[['sn','Dukaan ka naam'],['sa','Area / mohalla'],['sc','Shehar'],['sp','Pin code'],['sm','Ek customer me average kitne minute lagte hain (jaise 10)'],['ss','Kaam ki list (optional), jaise: Haircut 20, Shave 10']].map(([i,p])=>'<input id="'+i+'" placeholder="'+p+'" value="'+esc(S.f[i]||'')+'" oninput="S.f.'+i+'=this.value">').join('')+'<div class="mut">Kaam ki list khali chhod sakte hain. Tab har customer ka time upar likhe minute ka hoga.</div><button class="b p big" onclick="mkShop()">Dukaan banayein</button>';
  const s=S.shop;if(!s)return 'Load ho raha hai...';const T=S.otoks||[],al=location.origin+location.pathname+'?shop='+s.code;
  let h='<h1>'+esc(s.name)+'</h1><div class="row"><span class="code">'+esc(s.code)+'</span><span class="chip '+s.status+'">'+lbl[s.status]+'</span></div><div class="note">Customer link / QR ke liye: <b>'+esc(al)+'</b></div>';
  h+='<div class="tabs">'+['open','pause','close'].map(k=>'<button class="'+(s.status===k?'on':'')+'" onclick="setSt(\''+k+'\')">'+lbl[k]+'</button>').join('')+'</div>';
@@ -110,8 +110,10 @@ function shopT(){
  h+='<h2>Walk-in customer</h2><div class="card"><input id="wn" placeholder="Naam (optional)"><select id="wsv">'+Object.keys(s.services).map(k=>'<option>'+esc(k)+'</option>').join('')+'</select><button class="b p big" onclick="walk()">Token dein</button></div>';
  return h+'<button class="b big" onclick="S.ownerLoaded=0;auth.signOut().then(()=>{S.shop=null;S.noShop=0;location.reload()})">Logout</button>'}
 function mkShop(){run(async()=>{const n=$('sn').value.trim(),a=$('sa').value.trim(),c=$('sc').value.trim(),p=$('sp').value.trim(),sv={};
- $('ss').value.split(',').forEach(x=>{const m=x.trim().match(/^(.+?)\s+(\d+)$/);if(m)sv[m[1]]=+m[2]});
- if(!n||!a||!c||!p||!Object.keys(sv).length)throw Error('Saari jaankari bharein. Kaam aise likhein: Haircut 20, Shave 10');
+ const avg=parseInt($('sm').value,10);
+ if(!n||!a||!c||!p||!(avg>0))throw Error('Naam, area, shehar, pin code aur average minute (number me) bharein');
+ $('ss').value.split(',').forEach(x=>{x=x.trim();if(!x)return;const m=x.match(/^(.+?)\s+(\d+)$/);if(m)sv[m[1]]=+m[2];else sv[x]=avg});
+ if(!Object.keys(sv).length)sv['Customer']=avg;
  let code;for(let i=0;i<8;i++){code=(n.replace(/[^A-Za-z]/g,'').slice(0,2).toUpperCase()||'SH')+Math.floor(1000+Math.random()*9000);if(!(await db.doc('shops/'+code).get()).exists)break}
  const d={name:n,area:a,city:c,pin:p,code,owner:U.uid,status:'open',services:sv,nextToken:0,ver:false};await db.doc('shops/'+code).set(d);S.shop=d;S.noShop=0;startOwner();loadShops()})}
 const upd=(id,o)=>run(()=>tref(S.shop.code,id).update(o));
