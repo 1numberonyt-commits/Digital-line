@@ -2,9 +2,9 @@
 <html lang="hi"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Digital Line</title>
-<link rel="manifest" href="manifest.json"><meta name="theme-color" content="#0f3d3e"><link rel="icon" href="icon-192.png"><link rel="apple-touch-icon" href="icon-192.png">
+<link rel="manifest" href="manifest.json"><meta name="theme-color" content="#0d2f78"><link rel="icon" href="icon-192.png"><link rel="apple-touch-icon" href="icon-192.png">
 <style>
-:root{--bg:#e6eeec;--card:#fff;--ink:#0f3d3e;--mut:#5b7573;--line:#c5d6d3;--acc:#f2a900;--ok:#1f8a4c;--bad:#c0392b}
+:root{--bg:#e6eeec;--card:#fff;--ink:#0d2f78;--mut:#5b7573;--line:#c5d6d3;--acc:#f2a900;--ok:#1f8a4c;--bad:#c0392b}
 @media (prefers-color-scheme:dark){:root{--bg:#0c1a1a;--card:#142828;--ink:#e3f0ee;--mut:#8fb0ac;--line:#25403f;--ok:#46c47d;--bad:#ef6a5b}}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.4 system-ui,sans-serif;padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom)}
@@ -133,7 +133,7 @@ function sheetH(){const s=S.sheet;if(!s)return '';let h='<div class="sheet" oncl
  return h+'</div></div>'}
 function render(){const f=document.activeElement&&document.activeElement.id,p=f==='srch'?document.activeElement.selectionStart:0;
  if(S.tab==='s')ownerInit();
- $('app').innerHTML='<div class="tabs"><button class="'+(S.tab==='c'?'on':'')+'" onclick="S.tab=\'c\';render()">Customer</button><button class="'+(S.tab==='s'?'on':'')+'" onclick="S.tab=\'s\';render()">Dukandar</button></div>'+(S.err?'<div class="note err">'+esc(S.err)+'</div>':'')+(U?(S.tab==='c'?cust():shopT()):'Login ho raha hai...')+sheetH()+(S.toast?'<div class="toast"><span>'+esc(S.toast)+'</span>'+(S.undo?'<button class="b s" onclick="const u=S.undo;S.undo=null;S.toast=null;u()">Wapas jodo</button>':'')+'</div>':'');
+ $('app').innerHTML='<div style="text-align:center"><img src="logo.png" alt="Digital Line" style="height:84px;max-width:100%"></div><div class="tabs"><button class="'+(S.tab==='c'?'on':'')+'" onclick="S.tab=\'c\';render()">Customer</button><button class="'+(S.tab==='s'?'on':'')+'" onclick="S.tab=\'s\';render()">Dukandar</button></div>'+(S.err?'<div class="note err">'+esc(S.err)+'</div>':'')+(U?(S.tab==='c'?cust():shopT()):'Login ho raha hai...')+sheetH()+(S.toast?'<div class="toast"><span>'+esc(S.toast)+'</span>'+(S.undo?'<button class="b s" onclick="const u=S.undo;S.undo=null;S.toast=null;u()">Wapas jodo</button>':'')+'</div>':'');
  if(f==='srch'){const e=$('srch');if(e){e.focus();e.setSelectionRange(p,p)}}}
 render();
 if('serviceWorker' in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('sw.js').catch(()=>{}));
